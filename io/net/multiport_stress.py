@@ -22,6 +22,7 @@ from avocado.utils import process
 from avocado.utils import distro
 from avocado.utils import configure_network
 from avocado.utils.configure_network import PeerInfo
+from avocado.utils import wait
 
 
 class MultiportStress(Test):
@@ -55,6 +56,10 @@ class MultiportStress(Test):
         self.netmask = self.params.get("netmask", default="")
         for ipaddr, interface in zip(self.ipaddr, self.host_interfaces):
             configure_network.set_ip(ipaddr, self.netmask, interface)
+            if not wait.wait_for(configure_network.is_interface_link_up,
+                                 timeout=120, args=[interface]):
+                self.cancel("Link up of interface is taking longer than 120s")
+
         self.peer_user = self.params.get("peer_user", default="root")
         self.peer_password = self.params.get("peer_password", '*',
                                              default="None")
@@ -109,6 +114,9 @@ class MultiportStress(Test):
         for host_interface in self.host_interfaces:
             if not configure_network.set_mtu_host(host_interface, '1500'):
                 self.cancel("Failed to set mtu in host")
+            if not wait.wait_for(configure_network.is_interface_link_up,
+                                 timeout=120, args=[self.host_interface]):
+                self.fail("Link up of interface is taking longer than 120s")
         for peer_ip in self.peer_ips:
             self.peer_interface = self.peerinfo.get_peer_interface(peer_ip)
             if not self.peerinfo.set_mtu_peer(self.peer_interface, '1500'):
