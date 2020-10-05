@@ -112,6 +112,8 @@ class Bonding(Test):
         self.peer_wait_time = self.params.get("peer_wait_time", default=5)
         self.sleep_time = int(self.params.get("sleep_time", default=5))
         self.mtu = self.params.get("mtu", default=1500)
+        self.physical_interface = self.params.get("physical_interface",
+                                                  default=True)
         self.ib = False
         if self.host_interface[0:2] == 'ib':
             self.ib = True
@@ -286,9 +288,12 @@ class Bonding(Test):
                                 interface %s" % interface)
             time.sleep(self.sleep_time)
 
-        bond_mtu = ['2000', '3000', '4000', '5000', '6000', '7000',
-                    '8000', '9000']
-        for mtu in bond_mtu:
+        if self.physical_interface:
+            self.bond_mtu = ['2000', '3000', '4000', '5000', '6000', '7000',
+                             '8000', '9000']
+        else:
+            self.bond_mtu = ['9000']
+        for mtu in self.bond_mtu:
             self.bond_networkinterface = NetworkInterface(self.bond_name,
                                                           self.localhost)
             if self.bond_networkinterface.set_mtu(mtu) is not None:
