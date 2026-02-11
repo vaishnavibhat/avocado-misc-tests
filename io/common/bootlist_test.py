@@ -44,6 +44,13 @@ class BootlisTest(Test):
         interfaces = os.listdir('/sys/class/net')
         disks = self.params.get("disks", default=None)
         ifaces = self.params.get("interfaces", default=None)
+        if hbond is True:
+            for bond in ifaces.split(" "):
+                self.networkinterface = NetworkInterface(bond, local,
+                                                         if_type='Bond')
+                slaves = self.networkinterface._get_bondinterface_details()
+                if slaves:
+                    self.ifaces.extend(slaves)
         if ifaces:
             for device in ifaces.split(" "):
                 if device in interfaces:
