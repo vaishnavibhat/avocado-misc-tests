@@ -1,0 +1,26 @@
+interface:
+peer_ip:
+host_ip:
+netmask:
+ping_count:
+args: !mux
+    PrivateFlag:
+        privflag_test: True
+    Driver:
+        arg: -i
+    ShowOffloadProtocolFeature:
+        arg: -k
+    Statistics:
+        arg: -S
+    Show-permaddr:
+        arg: -P
+    Show-time-stamping:
+        arg: -T
+    Show-channels:
+        arg: -l
+    Set-channels:
+        arg: -L
+        tx_channel:
+        rx_channel:
+        other_channel:
+        combined_channel:

@@ -1,0 +1,10 @@
+stress_tar_url: 'https://github.com/resurrecting-open-source-projects/stress/releases/download/1.0.7/stress-1.0.7.tar.gz'
+iteration: 1
+stresstime: 10
+vmcount: 4
+iocount: 4
+memratio: 5
+# DLPAR bulk operation parameters
+bulk_dlpar_threshold_gb: 4096  # Memory threshold (GB) to trigger progressive bulk operations
+initial_lmb_count: 50  # Starting number of LMBs for progressive bulk operations
+max_lmb_count: 4096  # Maximum LMBs per operation for system stability

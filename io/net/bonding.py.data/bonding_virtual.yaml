@@ -1,0 +1,18 @@
+Test: !mux
+    active-backup:
+        bonding_mode: "1"
+    802.3ad:
+        bonding_mode: "4"
+bond_interfaces: ""
+host_ips: ""
+netmask: ""
+peer_ips: ""
+peer_interfaces: ""
+peer_public_ip: ""
+peer_password: "********"
+bond_name: "bondtest"
+user_name: "root"
+peer_bond_needed: False 
+peer_wait_time: "20"
+sleep_time: "10"
+mtu: "1500"

@@ -1,0 +1,49 @@
+interface:
+peer_ip:
+host_ip:
+netmask:
+hbond:
+ping_count:
+args: !mux
+    PrivateFlag:
+        privflag_test: True
+    Driver:
+        arg: -i
+    Autonegotiation:
+        arg: -r
+    PauseParameter:
+        arg: -a
+    Coalescing:
+        arg: -c
+    RegisterDump:
+        arg: -d
+    EEPROMDump:
+       arg: -e
+    RingParameter:
+        arg: -g
+    ShowOffloadProtocolFeature:
+        arg: -k
+    AdapterInitiate:
+        arg: -p
+        action_elapse: 3
+    Statistics:
+        arg: -S
+    SelfTest:
+        arg: -t
+    Show-permaddr:
+        arg: -P
+    Get-dump:
+        arg: -w
+    Show-time-stamping:
+        arg: -T
+    Get-phy-tunable:
+        arg: --get-phy-tunable
+        action_elapse: downshift
+    Show-channels:
+        arg: -l
+    Set-channels:
+        arg: -L
+        tx_channel:
+        rx_channel:
+        other_channel:
+        combined_channel:

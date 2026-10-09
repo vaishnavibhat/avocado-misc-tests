@@ -1,0 +1,29 @@
+interface: ""
+peer_ip: ""
+peer_public_ip: ""
+host_ip: ""
+netmask: ""
+peer_user: "root"
+peer_password: "********"
+PERF_SERVER_RUN: True
+EXPECTED_THROUGHPUT: 90
+duration: 120
+minimum_iterations: 1
+maximum_iterations: 5
+netperf_download: "https://github.com/HewlettPackard/netperf/archive/netperf-2.7.0.zip"
+option: !mux
+    generic:
+        option: ''
+    tcp_stream:
+        option: 'TCP_STREAM --'
+    udp_stream:
+        option: 'UDP_STREAM --'
+    tcp_rr:
+        option: 'TCP_RR'
+    udp_rr:
+        option: 'UDP_RR'
+mtu: !mux
+    1500:
+        mtu: "1500"
+    9000:
+        mtu: "9000"

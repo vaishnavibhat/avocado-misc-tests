@@ -1,0 +1,651 @@
+#!/usr/bin/env python
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+# See LICENSE for more details.
+#
+# Copyright: 2016 IBM
+# Author: Narasimhan V <sim@linux.vnet.ibm.com>
+
+"""
+NVM-Express user space tooling for Linux, which handles NVMe devices.
+This Suite creates and formats a namespace, reads and writes on it
+using nvme cli.
+"""
+
+import os
+import time
+import json
+from avocado import Test
+from avocado.utils import disk
+from avocado.utils import process
+from avocado.utils import archive
+from avocado.utils import download
+from avocado.utils import nvme
+from avocado.utils.software_manager.manager import SoftwareManager
+
+
+class NVMeTest(Test):
+
+    """
+    NVM-Express user space tooling for Linux, which handles NVMe devices.
+
+    :param device: Name of the nvme device
+    :param namespace: Namespace of the device
+    """
+
+    def setUp(self):
+        """
+        Build 'nvme-cli' and setup the device.
+        """
+        nvme_node = self.params.get('device', default=None)
+        if not nvme_node:
+            self.cancel("Please provide valid nvme node name")
+        elif "subsys" in nvme_node:
+            nvme_node = nvme.get_controllers_with_subsys(nvme_node)[0]
+        elif nvme_node.startswith("nqn."):
+            nvme_node = nvme.get_controllers_with_nqn(nvme_node)[0]
+        self.device = disk.get_absolute_disk_path(nvme_node)
+        cmd = 'ls %s' % self.device
+        if process.system(cmd, ignore_status=True):
+            self.cancel("%s does not exist" % self.device)
+
+        smm = SoftwareManager()
+        self.package = self.params.get('package', default='distro')
+        if self.package == 'upstream':
+            if not smm.check_installed("meson") and not \
+                    smm.install("meson"):
+                self.cancel('meson is needed for the test to be run')
+            locations = ["https://github.com/linux-nvme/nvme-cli/archive/"
+                         "master.zip"]
+            tarball = self.fetch_asset("nvme-cli.zip", locations=locations,
+                                       expire='15d')
+            archive.extract(tarball, self.teststmpdir)
+            os.chdir("%s/nvme-cli-master" % self.teststmpdir)
+            cmd = "meson setup --force-fallback-for=libnvme .build"
+            process.system(cmd, ignore_status=True)
+            process.system("meson compile -C .build", ignore_status=True)
+            self.binary = './.build/nvme'
+        else:
+            smm = SoftwareManager()
+            if not smm.check_installed("nvme-cli") and not \
+                    smm.install("nvme-cli"):
+                self.cancel('nvme-cli is needed for the test to be run')
+            self.binary = 'nvme'
+
+        self.format_size = self.get_block_size()
+        self.namespace = self.params.get('namespace', default='1')
+        self.shared = self.params.get("shared_namespaces", default=False)
+        self.id_ns = "%sn%s" % (self.device, self.namespace)
+        self.firmware_url = self.params.get('firmware_url', default='')
+        if 'firmware_upgrade' in str(self.name) and not self.firmware_url:
+            self.cancel("firmware url not given")
+
+        cmd = "%s id-ctrl %s -H" % (self.binary, self.device)
+        self.id_ctrl = process.system_output(cmd, shell=True).decode("utf-8")
+
+        test_dic = {'compare': 'Compare', 'formatnamespace': 'Format NVM',
+                    'dsm': 'Data Set Management',
+                    'writezeroes': 'Write Zeroes',
+                    'firmware_upgrade': 'FW Commit and Download',
+                    'writeuncorrectable': 'Write Uncorrectable',
+                    'subsystemreset': 'NVM Subsystem Reset'}
+        for key, value in list(test_dic.items()):
+            if key in str(self.name) and key == 'subsystemreset':
+                cmd = "cat /sys/kernel/security/lockdown"
+                lockdown = process.system_output(cmd, shell=True).decode("utf-8")
+                if '[none]' not in lockdown:
+                    self.log.info("lockdown is enabled,\
+                                  cannot run nvme show-regs command")
+                    continue
+                else:
+                    cmd = "%s show-regs %s -H" % (self.binary, self.device)
+                    regs = process.system_output(cmd, shell=True).decode("utf-8")
+                    if "%s Supported   (NSSRS): No" % value in regs:
+                        self.cancel("%s is not supported" % value)
+            if key in str(self.name):
+                if "%s Supported" % value not in self.id_ctrl:
+                    self.cancel("%s is not supported" % value)
+
+    @staticmethod
+    def run_cmd_return_output_list(cmd):
+        """
+        Runs the command, returns the output as a list, each of which is a line
+        in the output.
+        """
+        return process.system_output(cmd, ignore_status=True,
+                                     shell=True).decode("utf-8").splitlines()
+
+    def get_id_ctrl_prop(self, prop):
+        """
+        :param prop: property whose value is requested
+        Returns the property value from 'nvme id-ctrl' command
+        """
+        for line in self.id_ctrl.splitlines():
+            if line.startswith(prop):
+                return line.split()[-1]
+        return ''
+
+    def get_firmware_version(self):
+        """
+        Returns the firmware version.
+        """
+        return self.get_id_ctrl_prop('fr')
+
+    def get_firmware_log(self):
+        """
+        Returns the firmware log.
+        """
+        cmd = "%s fw-log %s" % (self.binary, self.device)
+        process.system(cmd, shell=True, ignore_status=True)
+
+    def get_firmware_slots(self):
+        """
+        Returns number of firmware slots
+        """
+        for line in self.id_ctrl.splitlines():
+            if "Firmware Slots" in line:
+                return int(line.split()[2].split('x')[-1])
+        return 0
+
+    def firmware_slot_write_supported(self, slot_num):
+        """
+        Returns False if firmware slot num is read only.
+        Returns True otherwise.
+        """
+        for line in self.id_ctrl.splitlines():
+            if "Firmware Slot %d Read-Only" % slot_num in line:
+                return False
+        return True
+
+    def reset_controller_sysfs(self):
+        """
+        Resets the controller via sysfs.
+        """
+        cmd = "echo 1 > /sys/class/nvme/%s/reset_controller" \
+            % self.device.split("/")[-1]
+        return process.system(cmd, shell=True, ignore_status=True)
+
+    def get_max_ns_count(self):
+        """
+        Returns the maximum number of namespaces supported
+        """
+        output = self.get_id_ctrl_prop('nn')
+        if output:
+            return int(output)
+        return 1
+
+    def get_total_capacity(self):
+        """
+        Returns the total capacity of the nvme controller.
+        If not found, return defaults to 0.
+        """
+        output = self.get_id_ctrl_prop('tnvmcap')
+        if output:
+            return int(output.replace(',', ''))
+        return 0
+
+    def ns_list(self):
+        """
+        Returns the list of namespaces in the nvme controller
+        """
+        cmd = "%s list-ns %s" % (self.binary, self.device)
+        namespaces = []
+        for line in self.run_cmd_return_output_list(cmd):
+            if line.startswith('['):
+                namespaces.append(int(line.split()[1].split(']')[0]) + 1)
+        return namespaces
+
+    def list_ns(self):
+        """
+        Prints the namespaces list command, and does a rescan as part of it
+        """
+        cmd = "%s ns-rescan %s" % (self.binary, self.device)
+        process.system(cmd, shell=True, ignore_status=True)
+        cmd = "%s list" % self.binary
+        return process.system_output(cmd, shell=True,
+                                     ignore_status=True).decode("utf-8")
+
+    def get_ns_controller(self):
+        """
+        Returns the nvme controller id
+        """
+        cmd = "%s id-ctrl %s" % (self.binary, self.device)
+        output = process.system_output(cmd, shell=True,
+                                       ignore_status=True).decode("utf-8")
+        for line in output.splitlines():
+            if 'cntlid' in line:
+                return line.split(':')[-1].strip()
+        return ""
+
+    def get_lba(self):
+        """
+        Returns LBA of the namespace.
+        If not found, return defaults to 0.
+        """
+        namespace = self.ns_list()
+        if namespace:
+            namespace = namespace[0]
+            cmd = "%s id-ns %sn%s" % (self.binary, self.device, namespace)
+            for line in self.run_cmd_return_output_list(cmd):
+                if 'in use' in line:
+                    return int(line.split()[1])
+        return '0'
+
+    def get_block_size(self):
+        """
+        Returns the block size of the namespace.
+        If not found, return defaults to 4k.
+        """
+        namespace = self.ns_list()
+        if namespace:
+            namespace = namespace[0]
+            cmd = "%s id-ns %sn%s" % (self.binary, self.device, namespace)
+            for line in self.run_cmd_return_output_list(cmd):
+                if 'in use' in line:
+                    return pow(2, int(line.split()[4].split(':')[-1]))
+        return 4096
+
+    def delete_all_ns(self):
+        """
+        Deletes all namespaces in the controller
+        """
+        for namespace in self.ns_list():
+            self.delete_ns(namespace)
+
+    def delete_ns(self, namespace):
+        """
+        :param ns: namespace id to be deleted
+        Deletes the specified namespace on the controller
+        """
+        cmd = "%s delete-ns %s -n %s" % (self.binary, self.device, namespace)
+        process.system(cmd, shell=True, ignore_status=True)
+
+    def create_full_capacity_ns(self):
+        """
+        Creates one namespace with full capacity
+        """
+        max_ns_blocks = self.get_total_capacity() // self.get_block_size()
+        self.create_one_ns('1', max_ns_blocks, self.get_ns_controller())
+
+    def create_max_ns(self):
+        """
+        Creates maximum number of namespaces, with equal capacity
+        """
+        max_ns_blocks = self.get_total_capacity() // self.get_block_size()
+        max_ns_blocks_considered = 60 * max_ns_blocks / 100
+        per_ns_blocks = max_ns_blocks_considered // self.get_max_ns_count()
+        ns_controller = self.get_ns_controller()
+        for ns_id in range(1, self.get_max_ns_count() + 1):
+            self.create_one_ns(str(ns_id), per_ns_blocks, ns_controller)
+
+    def get_supported_lba_formats(self):
+        """
+        Query and return supported LBA formats for the NVMe device.
+
+        :return: List of dicts with 'index', 'block_size', 'metadata_size'
+        :rtype: list
+        """
+        namespaces = self.ns_list()
+
+        if namespaces:
+            namespace = f"{self.device}n{namespaces[0]}"
+            cmd = f"{self.binary} id-ns {namespace} -o json"
+            try:
+                result = process.run(cmd, shell=True, ignore_status=False)
+                ns_data = json.loads(result.stdout_text)
+
+                lba_formats = []
+                for idx, lbaf in enumerate(ns_data.get('lbafs', [])):
+                    ds = lbaf.get('ds', 0)
+                    if ds > 0:
+                        lba_formats.append({
+                            'index': idx,
+                            'block_size': 2 ** ds,
+                            'metadata_size': lbaf.get('ms', 0)
+                        })
+
+                if lba_formats:
+                    self.log.debug(f"Found {len(lba_formats)} valid LBA formats")
+                    return lba_formats
+
+            except (process.CmdError, json.JSONDecodeError, KeyError) as e:
+                self.log.warning(f"Failed to query LBA formats: {e}")
+
+        self.log.warning("Using common format assumptions (512B and 4KB)")
+        return [
+            {'index': 0, 'block_size': 512, 'metadata_size': 0},
+            {'index': 1, 'block_size': 4096, 'metadata_size': 0}
+        ]
+
+    def get_optimal_flbas(self):
+        """
+        Determine optimal FLBAS index for namespace creation.
+
+        Strategy:
+        1. Prefer FLBAS index 0 if valid
+        2. Select first format with no metadata
+        3. Prefer common block sizes (512B, 4KB)
+
+        :return: FLBAS index (0-15)
+        :rtype: int
+        """
+        formats = self.get_supported_lba_formats()
+
+        if not formats:
+            self.log.warning("No valid formats found, defaulting to FLBAS=0")
+            return 0
+
+        for fmt in formats:
+            if fmt['index'] == 0:
+                self.log.info(f"Using FLBAS=0 (block_size={fmt['block_size']}B)")
+                return 0
+
+        formats_no_metadata = [f for f in formats if f['metadata_size'] == 0]
+
+        if formats_no_metadata:
+            for preferred_size in [512, 4096]:
+                for fmt in formats_no_metadata:
+                    if fmt['block_size'] == preferred_size:
+                        self.log.info(f"Using FLBAS={fmt['index']} "
+                                      f"(block_size={fmt['block_size']}B)")
+                        return fmt['index']
+
+            selected = formats_no_metadata[0]
+            self.log.info(f"Using FLBAS={selected['index']} "
+                          f"(block_size={selected['block_size']}B)")
+            return selected['index']
+
+        selected = formats[0]
+        self.log.warning(f"Using FLBAS={selected['index']} with metadata "
+                         f"(block_size={selected['block_size']}B)")
+        return selected['index']
+
+    def get_flbas_value(self):
+        """
+        Calculate appropriate FLBAS value for namespace creation.
+
+        :return: FLBAS value to use
+        :rtype: int
+        """
+        try:
+            optimal_flbas = self.get_optimal_flbas()
+            self.log.info(f"Calculated optimal FLBAS={optimal_flbas}")
+            return optimal_flbas
+        except Exception as e:
+            self.log.warning(f"FLBAS calculation failed: {e}, using FLBAS=0")
+            return 0
+
+    def create_one_ns(self, ns_id, blocksize, controller):
+        """
+        Creates one namespace with specified id, block size, and controller.
+        FLBAS is automatically calculated based on device capabilities.
+
+        :param ns_id: Namespace ID (typically 1-based)
+        :param blocksize: Size of namespace in blocks
+        :param controller: Controller ID to attach namespace to
+        """
+        flbas_value = self.get_flbas_value()
+
+        cmd = "%s create-ns %s --nsze=%s --ncap=%s --flbas=%s -dps=0" % (
+            self.binary, self.device, int(blocksize), int(blocksize), flbas_value)
+        result = process.system(cmd, shell=True, ignore_status=True)
+
+        if result != 0:
+            self.fail(
+                f"Namespace create failed with FLBAS={flbas_value}. "
+                f"Command: {cmd}. Exit code: {result}"
+            )
+
+        rescan_cmd = "%s ns-rescan %s" % (self.binary, self.device)
+        process.system(rescan_cmd, shell=True, ignore_status=True)
+        time.sleep(2)
+
+        cmd = "%s attach-ns %s --namespace-id=%s -controllers=%s" % (
+            self.binary, self.device, ns_id, controller)
+        result = process.system(cmd, shell=True, ignore_status=True)
+        if result != 0:
+            self.fail(f"Namespace attach failed: {cmd}. Exit code: {result}")
+
+        process.system(rescan_cmd, shell=True, ignore_status=True)
+        time.sleep(2)
+
+        ns_list_cmd = "%s list-ns %s" % (self.binary, self.device)
+        ns_output = process.system_output(ns_list_cmd, shell=True,
+                                          ignore_status=True).decode("utf-8")
+
+        ns_found = False
+        ns_id_int = int(ns_id)
+        ns_id_hex = f"0x{ns_id_int:x}"
+
+        for line in ns_output.splitlines():
+            if line.startswith('[') and ':' in line:
+                ns_part = line.split(':')[-1].strip()
+                if ns_part == ns_id_hex or ns_part == str(ns_id_int):
+                    ns_found = True
+                    break
+
+        if not ns_found:
+            self.log.warning(
+                f"Namespace {ns_id} attached but not found in list. "
+                f"Output: {ns_output}"
+            )
+
+    def test_firmware_upgrade(self):
+        """
+        Updates firmware of the device.
+        """
+        fw_file = self.firmware_url.split('/')[-1]
+        fw_version = fw_file.split('.')[0]
+        fw_file_path = download.get_file(self.firmware_url,
+                                         os.path.join(self.teststmpdir,
+                                                      fw_file))
+        # Getting the current FW details
+        current_fw = self.get_firmware_version()
+        self.log.info("Current FW: %s", current_fw)
+        self.get_firmware_log()
+
+        # NVMe fw-commit action 3: activate at next controller reset
+        # (no immediate reset required, unlike actions 0-2)
+        FW_COMMIT_ACTION_ACTIVATE_NO_RESET = 3
+
+        # Activating new FW
+        passed_commits = {}
+        failed_commits = {}
+        d_cmd = "%s fw-download %s --fw=%s" % (self.binary, self.device,
+                                               fw_file_path)
+
+        for slot in range(1, self.get_firmware_slots() + 1):
+            if not self.firmware_slot_write_supported(slot):
+                self.log.info("Slot %d is read-only, skipping", slot)
+                continue
+
+            passed_actions = []
+            failed_actions = []
+
+            for action in range(0, FW_COMMIT_ACTION_ACTIVATE_NO_RESET):
+                # Downloading new FW to the device for each slot
+                if process.system(d_cmd, shell=True, ignore_status=True):
+                    self.log.error("FW download failed for slot %d action %d",
+                                   slot, action)
+                    failed_actions.append(action)
+                    continue
+
+                cmd = "%s fw-commit %s -s %d -a %d" % (self.binary,
+                                                       self.device, slot,
+                                                       action)
+                if process.system(cmd, shell=True, ignore_status=True):
+                    self.log.error("FW commit failed for slot %d action %d",
+                                   slot, action)
+                    failed_actions.append(action)
+                else:
+                    passed_actions.append(action)
+
+            # Only track slots that had some activity
+            if passed_actions:
+                passed_commits[slot] = passed_actions
+            if failed_actions:
+                failed_commits[slot] = failed_actions
+
+        # Reset device if FW_COMMIT_ACTION_ACTIVATE_NO_RESET was not used
+        # in any successful commit
+        reset_needed = False
+        for slot, actions in passed_commits.items():
+            if FW_COMMIT_ACTION_ACTIVATE_NO_RESET not in actions:
+                reset_needed = True
+                break
+
+        if reset_needed:
+            self.log.info("Performing controller reset to activate firmware")
+            if self.reset_controller_sysfs():
+                self.fail("Controller reset after FW update failed")
+
+        # Fail if any commits failed
+        if failed_commits:
+            self.log.error("Passed commits: %s", passed_commits)
+            self.log.error("Failed commits: %s", failed_commits)
+            self.fail("Firmware commit failed for slots/actions: %s"
+                      % failed_commits)
+
+        self.get_firmware_log()
+        new_fw = self.get_firmware_version()
+
+        # Validate firmware version was updated
+        if fw_version != new_fw:
+            self.log.warn("Firmware version mismatch: expected %s, got %s" %
+                          (fw_version, new_fw))
+        else:
+            self.log.info("Firmware successfully updated from %s to %s",
+                          current_fw, new_fw)
+
+    def test_create_max_ns(self):
+        """
+        Test to create maximum number of namespaces
+        """
+        self.delete_all_ns()
+        self.create_max_ns()
+        self.list_ns()
+
+    def test_create_full_capacity_ns(self):
+        """
+        Test to create namespace with full capacity
+        """
+        device = self.device.split("/")[-1]
+        nvme.delete_all_ns(device)
+        nvme.create_full_capacity_ns(device,
+                                     shared_ns=self.shared)
+
+    def testformatnamespace(self):
+        """
+        Formats the namespace on the device.
+        """
+        cmd = '%s format %s -l %s' % (self.binary, self.id_ns, self.get_lba())
+        process.run(cmd, shell=True)
+
+    def testread(self):
+        """
+        Reads from the namespace on the device.
+        """
+        cmd = '%s read %s -z %d -t' % (self.binary, self.id_ns,
+                                       self.format_size)
+        if process.system(cmd, timeout=300, ignore_status=True, shell=True):
+            self.fail("Read failed")
+
+    def testwrite(self):
+        """
+        Write to the namespace on the device.
+        """
+        cmd = 'echo 1|%s write %s -z %d -t' % (self.binary, self.id_ns,
+                                               self.format_size)
+        if process.system(cmd, timeout=300, ignore_status=True, shell=True):
+            self.fail("Write failed")
+
+    def testcompare(self):
+        """
+        Compares data written on the device with given data.
+        """
+        self.testwrite()
+        cmd = 'echo 1|%s compare %s -z %d' % (self.binary, self.id_ns,
+                                              self.format_size)
+        if process.system(cmd, timeout=300, ignore_status=True, shell=True):
+            self.fail("Compare failed")
+
+    def testflush(self):
+        """
+        flush data on controller.
+        """
+        cmd = '%s flush %s' % (self.binary, self.id_ns)
+        if process.system(cmd, ignore_status=True, shell=True):
+            self.fail("Flush failed")
+
+    def testwritezeroes(self):
+        """
+        Write zeroes command to the device.
+        """
+        cmd = '%s write-zeroes %s' % (self.binary, self.id_ns)
+        if process.system(cmd, ignore_status=True, shell=True):
+            self.fail("Writing Zeroes failed")
+
+    def testwriteuncorrectable(self):
+        """
+        Write uncorrectable command to the device.
+        """
+        cmd = '%s write-uncor %s' % (self.binary, self.id_ns)
+        if process.system(cmd, ignore_status=True, shell=True):
+            self.fail("Writing Uncorrectable failed")
+
+    def testdsm(self):
+        """
+        The Dataset Management command test.
+        """
+        cmd = '%s dsm %s -a 1 -b 1 -s 1 -d -w -r' % (self.binary,
+                                                     self.id_ns)
+        if process.system(cmd, ignore_status=True, shell=True):
+            self.fail("Subsystem reset failed")
+
+    def testreset(self):
+        """
+        resets the controller.
+        """
+        cmd = '%s reset %s' % (self.binary, self.device)
+        if process.system(cmd, ignore_status=True, shell=True):
+            self.fail("Reset failed")
+
+    def testreset_sysfs(self):
+        """
+        resets the controller via sysfs.
+        """
+        if self.reset_controller_sysfs():
+            self.fail("Reset failed")
+
+    def testsubsystemreset(self):
+        """
+        resets the controller subsystem.
+        """
+        cmd = '%s subsystem-reset %s' % (self.binary, self.device)
+        if process.system(cmd, ignore_status=True, shell=True):
+            self.fail("Subsystem reset failed")
+
+    def test_create_namespaces(self):
+        """
+        creates the specified number of namespaces on nvme drive
+        """
+        ns_count = self.params.get('namespace_count', default=1)
+        device = self.device.split("/")[-1]
+        nvme.create_namespaces(device,
+                               ns_count,
+                               shared_ns=self.shared)
+
+    def test_delete_all_ns(self):
+        """
+        delete all namespaces of specified controller
+        """
+        device = self.device.split("/")[-1]
+        nvme.delete_all_ns(device)

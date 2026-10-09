@@ -1,0 +1,23 @@
+mdadm - manage MD devices aka Linux Software RAID 
+
+Values to be passed in yaml file:
+
+* Devices on which this scripts should be run. disks: "/dev/sdx /dev/sdy ..." or it can be any disk name like /dev/disk/by-id/ (space separated disks)
+
+* Raid Name to be created, optional parameter.
+
+* Raid levels to be created
+
+* metadata levels for raid
+
+* spare disks (space separated disks) [optional parameter]
+
+* required disks - This is a configurable value of minimum required disks for each raid level.
+  Usually, it is 2 for RAID1, 3 for RAID5 and RAID10 and 4 for RAID6.
+
+Note: Please specify minimum of 5 disks, for creating all levels of software
+raid. If 5 disks are not available, create 5 partitions, and specify those
+partitions in the yaml file.
+For testing RAID 1 minimum 3 disks or 3 partitions are required so that
+the third disk/partition can be added as spare to test failover.
+Test fails, if number of disks are not applicable for a certain raid level.

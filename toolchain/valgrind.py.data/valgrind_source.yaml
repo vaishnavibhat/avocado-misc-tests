@@ -1,0 +1,6 @@
+run_type: !mux
+   upstream:
+      version: '3.18.1'
+      type: 'upstream'
+   distro:
+      type: 'distro'

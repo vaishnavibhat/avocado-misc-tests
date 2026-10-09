@@ -1,0 +1,30 @@
+Install Paramiko module:
+Ubuntu :
+-> apt-get install python-paramiko
+-SLES/RHEL :
+SLES :
+
+-> SLES: Install python-devel,python-setuptools
+--> RHEL: Install python-devel.ppc64le and python-setuptools.noarch
+-> Download pycrypto-2.6.1.tar.gz & paramiko-1.16.0.tar.gz
+-> For pycrypto : python setup.py build & python setup.py install
+-> For parmaiko : easy_install ./
+-> Then import paramiko.
+
+RHEL :
+-> yum install python-paramiko.noarch
+Links :
+-> https://pypi.python.org/packages/source/p/pycrypto/pycrypto-2.6.1.tar.gz#md5=55a61a054aa66812daf5161a0d5d7eda
+
+Please setup repo for rsct and DynamicRM packages that are required for dlpar,
+script will take care of installation part.
+
+input parameters
+hmc_pwd: <hmc_password>
+hmc_username: hscroot
+lpar_2: ltcalpine-lp8-venkat
+pci_devices: "0017:01:00.0 0012:01:00.0"
+Multiple pci_devices can be given in the input file separated by space. DLPAR operation will be performed on each pci device
+User need to pass the pci_device of drc to do the action of DLPAR
+lpar_2 is the name of lpar where DLPAR move operation will be done
+num_of_dlpar: Dlpar operations runs number of times specified here

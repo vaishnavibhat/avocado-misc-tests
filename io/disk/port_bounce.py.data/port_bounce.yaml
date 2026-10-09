@@ -1,0 +1,9 @@
+switch_name:
+userid:
+password: "********"
+wwids:
+adapter_type:
+pci_devices:
+sbt: 60
+lbt: 120
+count: 1

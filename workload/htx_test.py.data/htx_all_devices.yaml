@@ -1,0 +1,6 @@
+htx_disks: ''
+all: True
+# time_interval is in minutes
+time_interval: 60
+mdt_file: 'mdt.hd'
+htx_rpm_link: 'http://rchgsa.ibm.com/gsa/rchgsa/projects/h/htx/public_html/htxonly/'

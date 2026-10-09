@@ -1,0 +1,20 @@
+max-time: "null"
+max-request: "null"
+url-link: 'https://github.com/akopytov/sysbench.git'
+fixlink: 'https://github.com/PPC64/LuaJIT.git'
+fixdir: '/third_party/luajit/luajit/'
+#Comment out branch if you want to checkout master.
+branch: '0.4'
+tests:
+  types: !mux
+    cpu:
+      type: 'cpu'
+      cpu-max-prime: 50000
+    threads:
+      type: 'threads'
+      threads-locks: 1
+  additional_params: !mux
+    min:
+      num-threads: 80
+    max:
+      num-threads: 120

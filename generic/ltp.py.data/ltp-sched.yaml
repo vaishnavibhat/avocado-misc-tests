@@ -1,0 +1,5 @@
+use_kirk: True
+kirk:
+    script: 'kirk'
+    sched:
+        args: '-f sched'

@@ -1,0 +1,33 @@
+disk:
+dir:
+use_kirk: True
+args: !mux
+    fs_di:
+        args: '-f fs -p fs_di'
+    fs_inod:
+        args: '-f fs -p fs_inod'
+    fs_fill:
+        args: '-f fs -p fs_fill'
+    fs_perm:
+        args: '-f fs_perms_simple -p fs_perm'
+fs: !mux
+    ext4:
+        fs: 'ext4'
+    ext3:
+        fs: 'ext3'
+    ext2:
+        fs: 'ext2'
+    xfs:
+        fs: 'xfs'
+    btrfs:
+        fs: 'btrfs'
+lv: !mux
+    lv:
+        lv: True
+    no_lv:
+        lv: False
+raid: !mux
+    raid:
+        raid: True
+    no_raid:
+        raid: False

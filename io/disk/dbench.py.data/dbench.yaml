@@ -1,0 +1,32 @@
+disk:
+dir:
+setup:
+    duration: !mux
+        default:
+            seconds: 70
+        quick:
+            seconds: 60
+    workers: !mux
+        default:
+            nprocs: null
+        minimal:
+            nprocs: 1
+fs: !mux
+    ext4:
+        fs: 'ext4'
+    xfs:
+        fs: 'xfs'
+    btrfs:
+        fs: 'btrfs'
+    no_fs:
+        fs: ''
+lv: !mux
+    lv:
+        lv: True
+    no_lv:
+        lv: False
+raid: !mux
+    raid:
+        raid: True
+    no_raid:
+        raid: False

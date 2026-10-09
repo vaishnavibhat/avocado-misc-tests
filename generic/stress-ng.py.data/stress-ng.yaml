@@ -1,0 +1,71 @@
+# While specifying a branch with tag omit `V` from the name.
+# e.g say V0.18.11 is the tag to be used specify
+# branch: '0.18.11'
+# 
+branch: 'master'
+workers:
+ttimeout: '5m'
+verify: True
+syslog: True
+metrics: True
+maximize: True
+times: True
+aggressive: True
+parallel: True
+subsystem: !mux
+    all:
+        stressors: "null"
+        class: 'all'
+        exclude: "null"
+    memory:
+        class: 'memory'
+        stressors: "null"
+        v_stressors: "null"
+        exclude: "null"
+    cpu:
+        class: 'cpu'
+        stressors: "null"
+        exclude: "null"
+    cpu-cache:
+        class: 'cpu-cache'
+        stressors: "null"
+        exclude: "null"
+    io:
+        class: 'io'
+        stressors: "null"
+        exclude: "null"
+    device:
+        class: 'device'
+        stressors: "null"
+        exclude: "null"
+    interrupt:
+        class: 'interrupt'
+        stressors: "null"
+        exclude: "null"
+    filesystem:
+        class: 'filesystem'
+        stressors: "null"
+        exclude: "null"
+    network:
+        class: 'network'
+        stressors: "null"
+        exclude: "null"
+    os:
+        class: 'os'
+        stressors: "null"
+        exclude: "null"
+    pipe:
+        class: 'pipe'
+        stressors: "null"
+        exclude: "null"
+    scheduler:
+        class: 'scheduler'
+        stressors: "null"
+        exclude: "null"
+    vm: 
+        class: 'vm'
+        stressors: "null"
+        exclude: "null"
+    numa:
+        stressors: 'numa'
+        exclude: "null"

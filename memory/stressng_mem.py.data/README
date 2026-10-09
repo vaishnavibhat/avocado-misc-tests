@@ -1,0 +1,82 @@
+Description:
+-------------
+    - The main purpose of this test aims at stressing the memory component of
+      the target system, using the memory stressors through the stress-ng
+      program.
+    - The script also imposes a load on the CPU, but that's just a side-effect
+    - The script uses a total of 28 stressors out of which we have 22 constant
+      runtime stressors and 6 variable runtime stressors.
+
+Input Parameters:
+------------------
+    --base_time    : 
+        - Specifies the time (in seconds) to run each stressor
+        - Default is 300 seconds or 5 minutes.
+
+    --time_per_gig :
+        - This specifies the time (in seconds) given to SOME stressors per GB
+        - Default is 60 seconds or 1 minute.
+        - 10 seconds per stressor, a total of 6 stressors hence;
+          [10 x 6] = 60s per GiB
+
+How is the estimated execution time calculated?
+-------------------------------------------------
+    - Considering the defaults the Calculations are as below : 
+
+    A] : For parameter --base-time       :   [ 28 x 300 ] 
+                                            = [8400 seconds] OR [140 minutes]
+
+    B] : For parameter --time-per-gig    :   ([16gb x 60s] / 60)
+                                            = 16 minutes
+                             OR
+                                            ([32gb x 60s] / 60)
+                                            = 32 minutes
+    Total Time taken = [A + B]
+                     = [140 + 16]
+                     = [156] minutes for a 16gb machine
+             OR
+                     = [140 + 32]
+                     = [172] minutes for a 32gb machine
+Method descriptions:
+----------------------
+    def execute_stressor():
+    - This method runs individual stressors - one at a time.
+    - Inputs : stressor, runtime
+    - Output : The variable "had_error" is set to value 1 in case of an error.
+
+    def calculate_variable_time()
+    - This method will estimate the time required for running the constant
+      runtime stressors & the variable runtime stressors.
+    - The calculations required for these estimates are explained above in
+      the "How is the estimated execution time calculated?" section.
+
+Additional Parameters (Max Config Support):
+--------------------------------------------
+    --max_vrt_time (default: 7200):
+        - Caps the variable runtime (in seconds) for VRT stressors.
+        - Prevents excessively long runs on large memory systems (> 4 TiB).
+        - Set to null to disable the cap.
+
+    --mem_per_worker (default: 20):
+        - Target GiB of memory per worker on max config systems (> 4 TiB).
+        - Worker count is scaled as: workers = total_GiB / mem_per_worker
+          capped at online_cpus * 2.
+
+    --memory_target_percent (default: 70):
+        - Target memory utilisation (%) for VRT stressors on max config
+          systems. Passed to stress-ng via --vm-bytes, --mmap-bytes, or
+          calculated per-worker for malloc/bigheap/brk stressors.
+
+    --max_cpu_load (default: null):
+        - Optional CPU load cap (%) for VRT stressors on max config systems.
+        - Passed to stress-ng as --cpu-load <N>. Omit or set null to disable.
+
+Max Config Behaviour (systems with > 4 TiB RAM):
+--------------------------------------------------
+    - is_max_config is set to True automatically when total RAM > 4096 GiB.
+    - VRT stressor runtime is capped at max_vrt_time seconds.
+    - Worker count for VRT stressors is scaled by memory rather than CPU
+      count, targeting the specified memory_target_percent utilisation.
+    - Use stressng_mem_maxconfig.yaml for a ready-made configuration tuned
+      for large memory systems.
+

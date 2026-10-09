@@ -1,0 +1,16 @@
+url: 'https://github.com/linux-test-project/ltp/archive/master.zip'
+skipfileurl: "null"
+use_kirk: True
+kirk: !mux
+    fs:
+        args: '-f fs'
+    fs_perms_simple:
+        args: '-f fs_perms_simple'
+    fsx-linux:
+        args: '-f ltp-aiodio.part3'
+    fs_bind:
+        args: '-f fs_bind'
+    fs_readonly:
+        args: '-f fs_readonly'
+    fs_aio_stress:
+        args: '-f ltp-aio-stress'

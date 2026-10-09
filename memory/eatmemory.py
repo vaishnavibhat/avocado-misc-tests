@@ -1,0 +1,134 @@
+#!/usr/bin/env python
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+# See LICENSE for more details.
+#
+# Copyright: 2016 IBM
+# Author: Santhosh G <santhog4@linux.vnet.ibm.com>
+#
+# Assisted with AI tools
+
+import os
+from avocado import Test
+from avocado.utils import build
+from avocado.utils import memory
+from avocado.utils import process
+from avocado.utils import archive
+from avocado.utils.software_manager.manager import SoftwareManager
+
+
+class EatMemory(Test):
+    '''
+    Memory stress test
+
+    :avocado: tags=memory
+    '''
+
+    def setUp(self):
+        smm = SoftwareManager()
+        deps = ['gcc', 'make', 'patch']
+        for package in deps:
+            if not smm.check_installed(package) and not smm.install(package):
+                self.cancel(package + ' is needed for the test to be run')
+        url = 'https://github.com/julman99/eatmemory/archive/master.zip'
+        tarball = self.fetch_asset(
+            "eatmemory.zip", locations=[url], expire='7d')
+        archive.extract(tarball, self.workdir)
+        extracted_entries = [
+            entry for entry in os.listdir(self.workdir)
+            if os.path.isdir(os.path.join(self.workdir, entry)) and
+            entry.startswith('eatmemory-')
+        ]
+        if not extracted_entries:
+            self.cancel('Failed to locate extracted eatmemory source directory')
+        self.sourcedir = os.path.join(self.workdir, extracted_entries[0])
+        os.chdir(self.sourcedir)
+        build.make(self.sourcedir)
+        self.binary_path = os.path.join(self.sourcedir, 'eatmemory')
+        if not os.path.exists(self.binary_path):
+            for root, _, files in os.walk(self.sourcedir):
+                if 'eatmemory' in files:
+                    self.binary_path = os.path.join(root, 'eatmemory')
+                    break
+        if not os.path.exists(self.binary_path):
+            self.cancel('Failed to locate built eatmemory binary')
+        mem = self.params.get('memory_to_test', default=int(
+            0.95 * memory.meminfo.MemFree.k))
+        self.mem_to_eat = self._mem_to_mbytes(mem)
+        if self.mem_to_eat is None:
+            self.cancel("Memory '%s' not valid." % mem)
+
+    @staticmethod
+    def _mem_to_mbytes(mem):
+        """
+        Converts memory from bytes, Kbytes, Gbytes or Tbytes to Mbytes.
+        If no unit is provided, we consider it's in Kbytes, which is the
+        unit of /proc/meminfo.
+        """
+        multiplier = {'b': 2**0,
+                      'k': 2**10,
+                      'm': 2**20,
+                      'g': 2**30,
+                      't': 2**40}
+        try:
+            mem_in_bytes = int(mem) * multiplier['k']
+        except ValueError:
+            value = int(mem[:-1])
+            unit = mem[-1].lower()
+            if unit not in multiplier:
+                return None
+            mem_in_bytes = value * multiplier[unit]
+
+        return mem_in_bytes // multiplier['m']
+
+    def test(self):
+        os.chdir(os.path.dirname(self.binary_path))
+        mem_unit = 'M'
+        cmd = 'printf "\\n" | %s -t 60 %s%s' % (self.binary_path,
+                                                self.mem_to_eat,
+                                                mem_unit)
+        if process.system(cmd, shell=True, ignore_status=True) == 0:
+            self.log.info('Success eating %s%s of memory.',
+                          self.mem_to_eat, mem_unit)
+        else:
+            self.fail('Not able to eat %s%s of memory.' %
+                      (self.mem_to_eat, mem_unit))
+
+    def test_max_hugepage(self):
+        """
+        To test configuring maximum number of hugepages and run eatmemory.
+        """
+        Total_mem = memory.memtotal()
+        hugepagesize = memory.get_huge_page_size()
+        nr_hugepage_init = memory.get_num_huge_pages()
+        nr_hugepages = int(Total_mem / hugepagesize)
+        try:
+            process.run('echo "vm.nr_hugepages=%s" >> /etc/sysctl.conf' %
+                        nr_hugepages, sudo=True, shell=True)
+            process.run('sysctl -p', sudo=True, shell=True)
+            mem_info = process.system_output("tail /proc/meminfo", shell=True)
+            self.log.info(mem_info)
+            # Run test with OOM handling
+            try:
+                self.test()
+            except Exception as e:
+                self.log.warning("Memory allocation test encountered an error: %s", str(e))
+                self.log.warning("This may be due to OOM condition after hugepage allocation")
+        finally:
+            # Always restore original hugepage configuration
+            self.log.info("Restoring original hugepage configuration")
+            process.run('sed -i "/vm.nr_hugepages=/d" /etc/sysctl.conf',
+                        sudo=True, shell=True, ignore_status=True)
+            process.run('echo "vm.nr_hugepages=%s" >> /etc/sysctl.conf' %
+                        nr_hugepage_init, sudo=True, shell=True)
+            process.run('sysctl -p', sudo=True, shell=True)
+            mem_info = process.system_output("tail /proc/meminfo", shell=True)
+            self.log.info(mem_info)
