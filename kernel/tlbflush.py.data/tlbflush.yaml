@@ -1,4 +1,0 @@
-runargs : !mux
-  nr_threads: 50 
-  entries:    200
-  iterations: 50

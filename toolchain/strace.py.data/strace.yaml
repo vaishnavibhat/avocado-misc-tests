@@ -1,6 +1,0 @@
-run_type: !mux
-    upstream:
-        url: 'https://github.com/strace/strace.git'
-        type: 'upstream'
-    distro:
-        type: 'distro'

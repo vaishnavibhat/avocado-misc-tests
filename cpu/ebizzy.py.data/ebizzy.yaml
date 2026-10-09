@@ -1,8 +1,0 @@
-ebizy_url: 'https://sourceforge.net/projects/ebizzy/files/ebizzy/0.3/ebizzy-0.3.tar.gz'
-iterations: 10
-perfstat: -a
-taskset: '0'
-seconds: 100
-num_chunks: 1000
-num_threads: 100
-chunk_size: 512000

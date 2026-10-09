@@ -1,7 +1,0 @@
-run_type: !mux
-    upstream:
-        type: 'upstream'
-    distro:
-        type: 'distro'
-prefix: '/usr'
-url: "https://gitlab.com/cryptsetup/cryptsetup/"

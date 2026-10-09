@@ -1,9 +1,0 @@
-# time_interval is in minutes
-time_interval: 1440
-mdt: !mux
-    bu:
-        mdt_file: 'mdt.bu'
-    less:
-        mdt_file: 'mdt.less'
-    all:
-        mdt_file: 'mdt.all'

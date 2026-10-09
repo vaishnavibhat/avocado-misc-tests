@@ -1,6 +1,0 @@
-run_type: !mux
-    upstream:
-        url: 'https://gitlab.com/cespedes/ltrace.git'
-        type: 'upstream'
-    distro:
-        type: 'distro'

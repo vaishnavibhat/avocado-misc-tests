@@ -1,6 +1,0 @@
-run_type: !mux
-    upstream:
-        location:
-        type: 'upstream'
-    distro:
-        type: 'distro'

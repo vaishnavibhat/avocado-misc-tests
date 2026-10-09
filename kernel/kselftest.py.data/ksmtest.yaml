@@ -1,7 +1,0 @@
-component: !mux
-    mm:
-        comp: "mm"
-        subtest: "ksm_tests"
-        test_type:
-        Size:
-        Dup_MM_Area:

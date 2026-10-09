@@ -1,7 +1,0 @@
-build_dir: '/tmp'
-run_type: !mux
-    upstream:
-        type: 'upstream'
-    distro:
-        type: 'distro'
-prefix: '/usr'

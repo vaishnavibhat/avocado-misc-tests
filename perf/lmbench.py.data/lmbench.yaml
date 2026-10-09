@@ -1,6 +1,0 @@
-runarg: !mux
-    MB: 125
-    fsdir:
-        fsdir: "null"
-    temp_file:
-        temp_file: "null"

@@ -1,5 +1,0 @@
-setup: !mux
-    1:
-        scenario_arg: 1
-    2:
-        scenario_arg: 2

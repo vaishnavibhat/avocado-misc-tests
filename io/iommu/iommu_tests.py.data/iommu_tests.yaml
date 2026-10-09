@@ -1,3 +1,0 @@
-pci_devices: ""
-count: 10
-dmesg_grep: "IOMMU"

@@ -1,9 +1,0 @@
-interface: 
-peer_interface: 
-host_ip: 
-peer_ip: 
-peer_public_ip: 
-peer_user: 
-peer_password: 
-netmask: 
-vlan_id: 

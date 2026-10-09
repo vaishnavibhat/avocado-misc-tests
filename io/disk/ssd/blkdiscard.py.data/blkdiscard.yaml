@@ -1,2 +1,0 @@
-scenario: !mux
-    disk: /dev/nvme0n1
